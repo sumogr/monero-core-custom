@@ -337,3 +337,4 @@ bool parse_hash256(const std::string str_hash, crypto::hash& hash)
     return true;
   }
 }
+}
