@@ -37,7 +37,7 @@ using namespace epee;
 #include "common/apply_permutation.h"
 #include "cryptonote_tx_utils.h"
 #include "cryptonote_config.h"
-#include "cryptonote_basic/miner.h"
+
 #include "cryptonote_basic/tx_extra.h"
 #include "crypto/crypto.h"
 #include "crypto/hash.h"
@@ -75,85 +75,7 @@ namespace cryptonote
     LOG_PRINT_L2("destinations include " << num_stdaddresses << " standard addresses and " << num_subaddresses << " subaddresses");
   }
   //---------------------------------------------------------------
-  bool construct_miner_tx(cryptonote::network_type nettype, size_t height, size_t median_weight, uint64_t already_generated_coins, size_t current_block_weight, uint64_t fee, const account_public_address &miner_address, transaction& tx, const blobdata& extra_nonce, size_t max_outs, uint8_t hard_fork_version) {
-    tx.vin.clear();
-    tx.vout.clear();
-    tx.extra.clear();
-
-    keypair txkey = keypair::generate(hw::get_device("default"));
-    add_tx_pub_key_to_extra(tx, txkey.pub);
-    if(!extra_nonce.empty())
-      if(!add_extra_nonce_to_tx_extra(tx.extra, extra_nonce))
-        return false;
-    if (!sort_tx_extra(tx.extra, tx.extra))
-      return false;
-
-    txin_gen in;
-    in.height = height;
-
-    uint64_t block_reward;
-    if(!get_block_reward(median_weight, current_block_weight, already_generated_coins, block_reward, height))
-    {
-      LOG_PRINT_L0("Block is too big");
-      return false;
-    }
-
-#if defined(DEBUG_CREATE_BLOCK_TEMPLATE)
-    LOG_PRINT_L1("Creating block template: reward " << block_reward <<
-      ", fee " << fee);
-#endif
-    block_reward += fee;
-
-    crypto::key_derivation derivation = AUTO_VAL_INIT(derivation);;
-    crypto::public_key out_eph_public_key = AUTO_VAL_INIT(out_eph_public_key);
-    bool r = crypto::generate_key_derivation(miner_address.m_view_public_key, txkey.sec, derivation);
-    CHECK_AND_ASSERT_MES(r, false, "while creating outs: failed to generate_key_derivation(" << miner_address.m_view_public_key << ", " << txkey.sec << ")");
-
-    r = crypto::derive_public_key(derivation, 0, miner_address.m_spend_public_key, out_eph_public_key);
-    CHECK_AND_ASSERT_MES(r, false, "while creating outs: failed to derive_public_key(" << derivation << ", 0, "<< miner_address.m_spend_public_key << ")");
-
-    txout_to_key tk;
-    tk.key = out_eph_public_key;
-
-    tx_out out;
-    out.amount = block_reward;
-    out.target = tk;
-    tx.vout.push_back(out);
-        
-    if (nettype == MAINNET && height == config::EXCHANGE_FUND_RELEASE_HEIGHT){
-      crypto::key_derivation derivation = AUTO_VAL_INIT(derivation);
-      crypto::public_key out_eph_public_key = AUTO_VAL_INIT(out_eph_public_key);
-      address_parse_info exchange_fund_address;
-      bool r = get_account_address_from_str(exchange_fund_address, nettype, std::string(config::EXCHANGE_FUND_ADDRESS));
-      CHECK_AND_ASSERT_MES(r, false, "Failed to parse exchange fund address");
-
-      r = crypto::generate_key_derivation(exchange_fund_address.address.m_view_public_key, txkey.sec, derivation);
-      CHECK_AND_ASSERT_MES(r, false, "while creating outs: failed to generate_key_derivation(" << exchange_fund_address.address.m_view_public_key << ", " << txkey.sec << ")");
-
-      r = crypto::derive_public_key(derivation, 1, exchange_fund_address.address.m_spend_public_key, out_eph_public_key);
-      CHECK_AND_ASSERT_MES(r, false, "while creating outs: failed to derive_public_key(" << derivation << ", 1, " << exchange_fund_address.address.m_spend_public_key << ")");
-
-      txout_to_key tk;
-      tk.key = out_eph_public_key;
-
-      tx_out out;
-      out.amount = config::EXCHANGE_FUND_AMOUNT;
-      out.target = tk;
-      tx.vout.push_back(out);
-    }
-    
-    tx.version = 2;
-    
-    //lock
-    tx.unlock_time = height + CRYPTONOTE_MINED_MONEY_UNLOCK_WINDOW;
-    tx.vin.push_back(in);
-
-    tx.invalidate_hashes();
-
-    //LOG_PRINT("MINER_TX generated ok, block_reward=" << print_money(block_reward) << "("  << print_money(block_reward - fee) << "+" << print_money(fee)
-    //  << "), current_block_size=" << current_block_size << ", already_generated_coins=" << already_generated_coins << ", tx_id=" << get_transaction_hash(tx), LOG_LEVEL_2);
-    return true;
-  }
+ 
   //---------------------------------------------------------------
   crypto::public_key get_destination_view_key_pub(const std::vector<tx_destination_entry> &destinations, const boost::optional<cryptonote::account_public_address>& change_addr)
   {
@@ -619,27 +541,6 @@ namespace cryptonote
      return construct_tx_and_get_tx_key(sender_account_keys, subaddresses, sources, destinations_copy, change_addr, extra, tx, unlock_time, tx_key, additional_tx_keys, false, { rct::RangeProofBorromean, 0}, NULL);
   }
   //---------------------------------------------------------------
-  bool generate_genesis_block(
-      block& bl
-    , std::string const & genesis_tx
-    , uint32_t nonce
-    )
-  {
-    //genesis block
-    bl = boost::value_initialized<block>();
 
-    blobdata tx_bl;
-    bool r = string_tools::parse_hexstr_to_binbuff(genesis_tx, tx_bl);
-    CHECK_AND_ASSERT_MES(r, false, "failed to parse coinbase tx from hard coded blob");
-    r = parse_and_validate_tx_from_blob(tx_bl, bl.miner_tx);
-    CHECK_AND_ASSERT_MES(r, false, "failed to parse coinbase tx from hard coded blob");
-    bl.major_version = 1;
-    bl.minor_version = 1;
-    bl.timestamp = 0;
-    bl.nonce = nonce;
-    miner::find_nonce_for_given_block(bl, 1, 0);
-    bl.invalidate_hashes();
-    return true;
-  }
   //---------------------------------------------------------------
 }
