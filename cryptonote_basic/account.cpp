@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2018, The Monero Project
+// Copyright (c) 2014-2019, The Monero Project
 // 
 // All rights reserved.
 // 
@@ -136,6 +136,16 @@ DISABLE_VS_WARNINGS(4244 4345)
   void account_base::set_null()
   {
     m_keys = account_keys();
+    m_creation_timestamp = 0;
+  }
+  //-----------------------------------------------------------------
+  void account_base::deinit()
+  {
+    try{
+      m_keys.get_device().disconnect();
+    } catch (const std::exception &e){
+      MERROR("Device disconnect exception: " << e.what());
+    }
   }
   //-----------------------------------------------------------------
   void account_base::forget_spend_key()
@@ -144,13 +154,13 @@ DISABLE_VS_WARNINGS(4244 4345)
     m_keys.m_multisig_keys.clear();
   }
   //-----------------------------------------------------------------
-  crypto::secret_key account_base::generate(const crypto::secret_key& recovery_key, bool recover, bool two_random, bool from_legacy16B_lw_seed)
+  crypto::secret_key account_base::generate(const crypto::secret_key& recovery_key, bool recover, bool two_random)
   {
     crypto::secret_key first = generate_keys(m_keys.m_account_address.m_spend_public_key, m_keys.m_spend_secret_key, recovery_key, recover);
 
     // rng for generating second set of keys is hash of first rng.  means only one set of electrum-style words needed for recovery
     crypto::secret_key second;
-    keccak((uint8_t *)&(from_legacy16B_lw_seed ? first : m_keys.m_spend_secret_key), sizeof(crypto::secret_key), (uint8_t *)&second, sizeof(crypto::secret_key));
+    keccak((uint8_t *)&m_keys.m_spend_secret_key, sizeof(crypto::secret_key), (uint8_t *)&second, sizeof(crypto::secret_key));
 
     generate_keys(m_keys.m_account_address.m_view_public_key, m_keys.m_view_secret_key, second, two_random ? false : true);
 
@@ -205,11 +215,16 @@ DISABLE_VS_WARNINGS(4244 4345)
   void account_base::create_from_device(hw::device &hwdev)
   {
     m_keys.set_device(hwdev);
-    MCDEBUG("ledger", "device type: "<<typeid(hwdev).name());
-    hwdev.init();
-    hwdev.connect();
-    hwdev.get_public_address(m_keys.m_account_address);
-    hwdev.get_secret_keys(m_keys.m_view_secret_key, m_keys.m_spend_secret_key);
+    MCDEBUG("device", "device type: "<<typeid(hwdev).name());
+    CHECK_AND_ASSERT_THROW_MES(hwdev.init(), "Device init failed");
+    CHECK_AND_ASSERT_THROW_MES(hwdev.connect(), "Device connect failed");
+    try {
+      CHECK_AND_ASSERT_THROW_MES(hwdev.get_public_address(m_keys.m_account_address), "Cannot get a device address");
+      CHECK_AND_ASSERT_THROW_MES(hwdev.get_secret_keys(m_keys.m_view_secret_key, m_keys.m_spend_secret_key), "Cannot get device secret");
+    } catch (const std::exception &e){
+      hwdev.disconnect();
+      throw;
+    }
     struct tm timestamp = {0};
     timestamp.tm_year = 2014 - 1900;  // year 2014
     timestamp.tm_mon = 4 - 1;  // month april
