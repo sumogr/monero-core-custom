@@ -1,4 +1,5 @@
-// Copyright (c) 2014-2018, The Monero Project
+// Copyright (c) 2017-2019, Sumokoin Project
+// Copyright (c) 2014-2019, The Monero Project
 // 
 // All rights reserved.
 // 
@@ -87,9 +88,8 @@ namespace cryptonote {
   /* Cryptonote helper functions                                          */
   /************************************************************************/
   size_t get_min_block_weight(uint8_t version);
-  size_t get_max_block_weight();
   size_t get_max_tx_size();
-  bool get_block_reward(size_t median_size, size_t current_block_size, uint64_t already_generated_coins, uint64_t &reward, uint64_t height);
+  bool get_block_reward(size_t median_weight, size_t current_block_weight, uint64_t already_generated_coins, uint64_t &reward, uint64_t height);
   uint8_t get_account_address_checksum(const public_address_outer_blob& bl);
   uint8_t get_account_integrated_address_checksum(const public_integrated_address_outer_blob& bl);
 
@@ -111,11 +111,18 @@ namespace cryptonote {
     , const std::string& str
     );
 
+  bool get_account_address_from_str_or_url(
+      address_parse_info& info
+    , network_type nettype
+    , const std::string& str_or_url
+    , std::function<std::string(const std::string&, const std::vector<std::string>&, bool)> dns_confirm = return_first_address
+    );
+
   bool is_coinbase(const transaction& tx);
 
   bool operator ==(const cryptonote::transaction& a, const cryptonote::transaction& b);
   bool operator ==(const cryptonote::block& a, const cryptonote::block& b);
 }
 
-bool parse_hash256(const std::string str_hash, crypto::hash& hash);
+bool parse_hash256(const std::string &str_hash, crypto::hash& hash);
 
